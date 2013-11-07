@@ -1,0 +1,9 @@
+{
+	"name": "aes.d",
+	"description": "An example project skeleton",
+	"authors": [
+		"Lloyd Cunningham"
+	],
+	"dependencies": {
+	}
+}
