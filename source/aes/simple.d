@@ -1,3 +1,11 @@
+/**
+ * Contains functions which will encrypt entire files or byte arrays and
+ * automatically handle block cipher modes and padding. Specifically,
+ * the functions use a padding scheme in which the last block is filled
+ * with bytes 0x80 0x00 0x00 0x00 ... 0x00. If the input is already a
+ * multiple of the block size (which is 128 bits), then an extra block
+ * of padding is added with the aforementioned bytes.
+ */
 module aes.simple;
 
 import std.stdio;
@@ -59,7 +67,7 @@ body {
     
     size_t padStart = plain.length - 1;
     while (plain[padStart] == 0x00 && padStart >= 0)
-        padStart++;
+        padStart--;
     
     if (plain[padStart] != 0x80)
         throw new Exception("malformed padding");
@@ -141,7 +149,7 @@ body {
             
             size_t padStart = block.length - 1;
             while (block[padStart] == 0x00 && padStart >= 0)
-                padStart++;
+                padStart--;
             
             if (block[padStart] != 0x80)
                 throw new Exception("malformed padding");
