@@ -6,12 +6,10 @@
  * multiple of the block size (which is 128 bits), then an extra block
  * of padding is added with the aforementioned bytes.
  */
-module aes.simple;
+module aes.util;
 
 import std.stdio;
-
-import aes.encryptor;
-import aes.decryptor;
+import aes.encryptor, aes.decryptor, aes.common;
 
 /// Enumeration of available block cipher modes of operation.
 enum BlockMode { 
@@ -20,7 +18,7 @@ enum BlockMode {
 };
 
 /// Encrypts a buffer of plaintext and returns a new buffer containing the ciphertext.
-ubyte[] aesEncrypt(const ubyte[] plain, const ubyte[] key, BlockMode mode = BlockMode.ECB)
+ubyte[] encrypt(const ubyte[] plain, const ubyte[] key, BlockMode mode = BlockMode.ECB)
 in {
     auto keySize = key.length * 8;
     assert(keySize == 128 || keySize == 192 || keySize == 256);
@@ -31,21 +29,24 @@ body {
     cipher[plain.length] = 0x80;
     cipher[plain.length .. $] = 0x00;
     
-    auto encryptor = new Encryptor(key);
-    encryptor.encryptBlock(cipher[0..16]);
+    auto encryptor = createEncryptor(key);
     
-    for (int i = 16; i < cipher.length; i += 16) {
-        if (mode == BlockMode.CBC)
-            cipher[i .. i + 16] ^= cipher[i - 16 .. i];
+    if (mode == BlockMode.CBC) {
+        encryptor.processBlock(cipher[0..16]);
         
-        encryptor.encryptBlock(cipher[i .. i + 16]);
+        for (int i = 16; i < cipher.length; i += 16) {
+            cipher[i .. i + 16] ^= cipher[i - 16 .. i];
+            encryptor.processBlock(cipher[i .. i + 16]);
+        }
+    } else {
+        encryptor.processChunk(cipher);
     }
     
     return cipher;
 }
 
 /// Decrypts a buffer of ciphertext and returns a new buffer containing the plaintext.
-ubyte[] aesDecrypt(const ubyte[] cipher, const ubyte[] key, BlockMode mode = BlockMode.ECB)
+ubyte[] decrypt(const ubyte[] cipher, const ubyte[] key, BlockMode mode = BlockMode.ECB)
 in {
     auto keySize = key.length * 8;
     assert(keySize == 128 || keySize == 192 || keySize == 256);
@@ -54,15 +55,17 @@ in {
 }
 body {
     ubyte[] plain = cipher.dup;
-    auto decryptor = new Decryptor(key);
+    auto decryptor = createDecryptor(key);
     
-    decryptor.decryptBlock(plain[0..16]);
-    
-    for (size_t i = 16; i < plain.length; i += 16) {
-        decryptor.decryptBlock(plain[i .. i + 16]);
+    if (mode == BlockMode.CBC) {
+        decryptor.processBlock(plain[0..16]);
         
-        if (mode == BlockMode.CBC)
+        for (size_t i = 16; i < plain.length; i += 16) {
+            decryptor.processBlock(plain[i .. i + 16]);
             plain[i .. i + 16] ^= cipher[i - 16 .. i];
+        }
+    } else {
+        decryptor.processChunk(plain);
     }
     
     size_t padStart = plain.length - 1;
@@ -76,7 +79,7 @@ body {
 }
 
 /// Encrypts an entire input stream and writes it to an output stream.
-void aesEncrypt(File input, File output, const ubyte[] key, BlockMode mode = BlockMode.ECB)
+void encrypt(File input, File output, const ubyte[] key, BlockMode mode = BlockMode.ECB)
 in {
     auto keySize = key.length * 8;
     assert(keySize == 128 || keySize == 192 || keySize == 256);
@@ -86,8 +89,8 @@ in {
 body {
     ubyte[] block = new ubyte[16];
     ubyte[] prevBlock = new ubyte[16];
-    auto encryptor = new Encryptor(key);
-    size_t amtRead = 16;
+    auto encryptor = createEncryptor(key);
+    size_t amtRead = block.length;
     
     while (amtRead == block.length) {
         
@@ -102,7 +105,7 @@ body {
         if (mode == BlockMode.CBC) 
             block[] ^= prevBlock[];
         
-        encryptor.encryptBlock(block);
+        encryptor.processBlock(block);
         output.rawWrite(block);
         
         if (mode == BlockMode.CBC) 
@@ -111,7 +114,7 @@ body {
 }
 
 /// Decrypts an entire input stream and writes it to an output stream.
-void aesDecrypt(File input, File output, const ubyte[] key, BlockMode mode = BlockMode.ECB)
+void decrypt(File input, File output, const ubyte[] key, BlockMode mode = BlockMode.ECB)
 in {
     auto keySize = key.length * 8;
     assert(keySize == 128 || keySize == 192 || keySize == 256);
@@ -122,7 +125,7 @@ body {
     ubyte[] block = new ubyte[16];
     ubyte[] prevBlock = new ubyte[16];
     ubyte[] nextBlock = new ubyte[16];
-    auto decryptor = new Decryptor(key);
+    auto decryptor = createDecryptor(key);
     
     auto amtRead = input.rawRead(nextBlock).length;
     if (amtRead < nextBlock.length)
@@ -131,7 +134,7 @@ body {
     do {
         
         block[] = nextBlock[];
-        decryptor.decryptBlock(block);
+        decryptor.processBlock(block);
         
         if (mode == BlockMode.CBC) {
             block[] ^= prevBlock[];

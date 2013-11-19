@@ -2,12 +2,39 @@ module aes.decryptor;
 
 import aes.common;
 import aes.scheduler;
-import std.stdio;
 
-/**
- * A class for decrypting blocks using AES.
- */
-class Decryptor {
+AesAlgorithm createDecryptor(const ubyte[] key) nothrow
+in {
+    auto keySize = key.length * 8;
+    assert(keySize == 128 || keySize == 192 || keySize == 256);
+}
+body {
+    version (X86_64) {
+        import aes.aesni;
+        
+        if (aesniIsSupported()) {
+            switch (key.length){
+                case 16:
+                    return new AesniDecryptor128(key);
+                    break;
+                case 24:
+                    return new AesniDecryptor192(key);
+                    break;
+                case 32:
+                    return new AesniDecryptor256(key);
+                    break;
+                default:
+                    // can't happen if input contract is met
+                    break;
+            }
+        }
+    }
+    
+    return new DefaultDecryptor(key);
+}
+
+/// Decryptor written entirely in D code. Should be platform-independent.
+class DefaultDecryptor : AesDecryptor {
     
     /**
      * Constructs a decrpytor using the provided key.
@@ -17,27 +44,13 @@ class Decryptor {
      *     key = the decryption key. supported sizes are
      *           128, 192, and 256 bit keys.
      */
-    this(const ubyte[] key)
+    this(const ubyte[] key) nothrow
     {
-        auto keySize = key.length * 8;
-        if (keySize != 128 && keySize != 192 && keySize != 256)
-            throw new Exception("unsupported key size");
-        
         roundKeys = scheduleKeys(key);
     }
     
-    /**
-     * Decrypts a 128-bit block.
-     *
-     * Params:
-     *    block = an array of exactly 16 bytes to decrpyt.
-     *            it will be overwritten with the decrpyted version.
-     */
-    void decryptBlock(ubyte[] block) nothrow
-    in {
-        assert(block.length == 16);
-    }
-    body {
+    override void processBlock(ubyte[] block) nothrow
+    {
         state = *(cast(State*) block.ptr);
         auto nr = roundKeys.length - 1;
         
@@ -59,6 +72,14 @@ class Decryptor {
         *(cast(State*) block.ptr) = state;
     }
     
+    override void processChunk(ubyte[] chunk) nothrow
+    {
+        while (chunk.length > 0) {
+            processBlock(chunk[0 .. 16]);
+            chunk = chunk[16 .. $];
+        }
+    }
+    
     private State state;
     private State[] roundKeys;
     
@@ -74,11 +95,14 @@ class Decryptor {
         ubyte[4] t;
         
         for (int i = 1; i < 4; i++) {
-            t[] = state[i][];
+            
+            // copy row i into t
+            for (int j = 0; j < 4; j++)
+                t[j] = state[j][i];
             
             for (int j = 0; j < 4; j++)
                 // note that & 3 is the same as % 4 for nonnegative numbers
-                state[i][j] = t[(j - i + 4) & 3];
+                state[j][i] = t[(j - i + 4) & 3];
         }
     }
     
@@ -89,13 +113,12 @@ class Decryptor {
         for (int i = 0; i < 4; i++) {
             
             // copy column i into t
-            for (int j = 0; j < 4; j++)
-                t[j] = state[j][i];
+            t[] = state[i][];
             
-            state[0][i] = mul14[t[0]] ^ mul11[t[1]] ^ mul13[t[2]] ^ mul9[t[3]];
-            state[1][i] = mul14[t[1]] ^ mul11[t[2]] ^ mul13[t[3]] ^ mul9[t[0]];
-            state[2][i] = mul14[t[2]] ^ mul11[t[3]] ^ mul13[t[0]] ^ mul9[t[1]];
-            state[3][i] = mul14[t[3]] ^ mul11[t[0]] ^ mul13[t[1]] ^ mul9[t[2]];
+            state[i][0] = mul14[t[0]] ^ mul11[t[1]] ^ mul13[t[2]] ^ mul9[t[3]];
+            state[i][1] = mul14[t[1]] ^ mul11[t[2]] ^ mul13[t[3]] ^ mul9[t[0]];
+            state[i][2] = mul14[t[2]] ^ mul11[t[3]] ^ mul13[t[0]] ^ mul9[t[1]];
+            state[i][3] = mul14[t[3]] ^ mul11[t[0]] ^ mul13[t[1]] ^ mul9[t[2]];
         }
     }
     
@@ -104,8 +127,7 @@ class Decryptor {
         State key = roundKeys[roundKeyIndex];
         
         for (int i = 0; i < 4; i++)
-            for (int j = 0; j < 4; j++)
-                state[i][j] ^= key[i][j];
+            state[i][] ^= key[i][];
     }
 }
 
@@ -187,54 +209,76 @@ private immutable ubyte[] mul14 = [
     0xd7,0xd9,0xcb,0xc5,0xef,0xe1,0xf3,0xfd,0xa7,0xa9,0xbb,0xb5,0x9f,0x91,0x83,0x8d
 ];
 
+// a simple test of decryption using examples from
+// appendix C of the AES spec in the FIPS-197 document.
+// only tests DefaultDecryptor, AES-NI tests are in aesni.d.
 unittest {
-    ubyte[] key = [
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
+    
+    immutable ubyte[] plaintext = [
+        0x00,0x11,0x22,0x33,
+        0x44,0x55,0x66,0x77,
+        0x88,0x99,0xaa,0xbb,
+        0xcc,0xdd,0xee,0xff
     ];
     
-    ubyte[] plaintext = [
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,
+    ubyte[] buf = new ubyte[16];
+    AesAlgorithm d;
+    
+    ubyte[] key128 = [
+        0x00,0x01,0x02,0x03,
+        0x04,0x05,0x06,0x07,
+        0x08,0x09,0x0a,0x0b,
+        0x0c,0x0d,0x0e,0x0f
     ];
     
-    ubyte[] ciphertext = [
-        0x66,0xEF,0x88,0xCA,
-        0xE9,0x8A,0x4C,0x34,
-        0x4B,0x2C,0xFA,0x2B,
-        0xD4,0x3B,0x59,0x2E,
+    ubyte[] ciphertext128 = [
+        0x69,0xc4,0xe0,0xd8,
+        0x6a,0x7b,0x04,0x30,
+        0xd8,0xcd,0xb7,0x80,
+        0x70,0xb4,0xc5,0x5a
     ];
     
-    auto d = new Decryptor(key);
-    d.decryptBlock(ciphertext);
-    assert(ciphertext == plaintext);
+    d = new DefaultDecryptor(key128);
+    buf[] = ciphertext128[];
+    d.processBlock(buf);
+    assert(buf == plaintext);
     
-    key = [
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
-        0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00,
+    ubyte[] key192 = [
+        0x00,0x01,0x02,0x03,0x04,0x05,
+        0x06,0x07,0x08,0x09,0x0a,0x0b,
+        0x0c,0x0d,0x0e,0x0f,0x10,0x11,
+        0x12,0x13,0x14,0x15,0x16,0x17
     ];
     
-    plaintext = [
-        0x00,0x44,0x88,0xCC,
-        0x11,0x55,0x99,0xDD,
-        0x22,0x66,0xAA,0xEE,
-        0x33,0x77,0xBB,0xFF,
+    ubyte[] ciphertext192 = [
+        0xdd,0xa9,0x7c,0xa4,
+        0x86,0x4c,0xdf,0xe0,
+        0x6e,0xaf,0x70,0xa0,
+        0xec,0x0d,0x71,0x91
     ];
     
-    ciphertext = [
-        0x1C,0x9E,0xCA,0x64,
-        0x06,0x7E,0x96,0xC0,
-        0x0F,0xA8,0x1A,0x5C,
-        0x4C,0xD6,0x2D,0x18,
+    d = new DefaultDecryptor(key192);
+    buf[] = ciphertext192[];
+    d.processBlock(buf);
+    assert(buf == plaintext);
+    
+    ubyte[] key256 = [
+        0x00,0x01,0x02,0x03,0x04,0x05,0x06,0x07,
+        0x08,0x09,0x0a,0x0b,0x0c,0x0d,0x0e,0x0f,
+        0x10,0x11,0x12,0x13,0x14,0x15,0x16,0x17,
+        0x18,0x19,0x1a,0x1b,0x1c,0x1d,0x1e,0x1f
     ];
     
-    d = new Decryptor(key);
-    d.decryptBlock(ciphertext);
-    assert(ciphertext == plaintext);
+    ubyte[] ciphertext256 = [
+        0x8e,0xa2,0xb7,0xca,
+        0x51,0x67,0x45,0xbf,
+        0xea,0xfc,0x49,0x90,
+        0x4b,0x49,0x60,0x89
+    ];
+    
+    d = new DefaultDecryptor(key256);
+    buf[] = ciphertext256[];
+    d.processBlock(buf);
+    assert(buf == plaintext);
+    
 }

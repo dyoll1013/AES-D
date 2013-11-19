@@ -1,6 +1,55 @@
 module aes.common;
 
+/// A 4x4 matrix stored in COLUMN-MAJOR order.
 alias State = ubyte[4][4];
+
+/// An interface to abstractly use AES algorithms.
+interface AesAlgorithm {
+    
+    /**
+     * Encrypts or decrypts a 128-bit block.
+     *
+     * Params:
+     *    block = an array of exactly 16 bytes to process.
+     *            it will be overwritten with the processed version.
+     */
+    void processBlock(ubyte[] block) nothrow
+    in { assert(block.length == 16); }
+    
+    /**
+     * Encrypts or decrypts a variable number of blocks. May be more efficient
+     * than passing a single block at a time.
+     *
+     * Params:
+     *    chunk = an array with a size that is a multiple of 16.
+     *            it will be overwritten with the processed version.
+     */
+    void processChunk(ubyte[] chunk) nothrow
+    in { assert(chunk.length % 16 == 0); }
+    
+    /// Returns true if this is an encryption algorithm, false otherwise.
+    bool isEncryptor() nothrow pure;
+}
+
+abstract class AesEncryptor : AesAlgorithm {
+    abstract override void processBlock(ubyte[] block) nothrow;
+    abstract override void processChunk(ubyte[] chunk) nothrow;
+    
+    override bool isEncryptor() nothrow pure
+    {
+        return true;
+    }
+}
+
+abstract class AesDecryptor : AesAlgorithm {
+    abstract override void processBlock(ubyte[] block) nothrow;
+    abstract override void processChunk(ubyte[] chunk) nothrow;
+    
+    override bool isEncryptor() nothrow pure
+    {
+        return false;
+    }
+}
 
 immutable ubyte[] sBox = [
     0x63,0x7c,0x77,0x7b,0xf2,0x6b,0x6f,0xc5,0x30,0x01,0x67,0x2b,0xfe,0xd7,0xab,0x76,

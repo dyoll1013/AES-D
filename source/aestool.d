@@ -1,5 +1,5 @@
 import std.stdio, std.conv, std.getopt, std.file, std.string;
-import aes.simple;
+import aes;
 
 int main(string[] args)
 {
@@ -8,15 +8,15 @@ int main(string[] args)
     string keyFile;
     ubyte[] key;
     BlockMode mode = BlockMode.ECB;
-    bool encrypt;
+    bool isEncrypt;
     File input = stdin;
     File output = stdout;
     
     if (args.length > 1) {
         if (args[1] == "encrypt"){
-            encrypt = true;
+            isEncrypt = true;
         } else if (args[1] == "decrypt") {
-            encrypt = false;
+            isEncrypt = false;
         } else {
             printHelp(args[0]);
             return 1;
@@ -73,10 +73,10 @@ int main(string[] args)
         if (outputFile)
             output = File(outputFile, "wb");
         
-        if (encrypt)
-            aesEncrypt(input, output, key, mode);
+        if (isEncrypt)
+            encrypt(input, output, key, mode);
         else
-            aesDecrypt(input, output, key, mode);
+            decrypt(input, output, key, mode);
         
     } catch (Exception e) {
         stderr.writeln("I/O error: ", e);
