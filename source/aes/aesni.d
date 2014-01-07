@@ -9,26 +9,71 @@ module aes.aesni;
 
 import aes.common;
 
-extern (C) bool aesniIsSupported() nothrow;
+/* For reasons beyond my comprehension, on OS X the linking convention is that
+   C functions have an underscore prepended to their name. So the functions in
+   the assembly file are defined with the underscore, so for compiling elsewhere
+   we must create aliases to them. */
+version (OSX)
+{
+    extern (C) bool aesniIsSupported() nothrow;
 
-extern (C) private {
-    void aesniScheduleKeys128(uint* roundKeys) nothrow;
-    void aesniScheduleKeys192(uint* roundKeys) nothrow;
-    void aesniScheduleKeys256(uint* roundKeys) nothrow;
-    
-    void aesniPrepareDecryptionKeys(uint* roundKeys, ulong nr) nothrow;
-    
-    void aesniEncryptRound128(ubyte* block) nothrow;
-    void aesniEncryptRound192(ubyte* block) nothrow;
-    void aesniEncryptRound256(ubyte* block) nothrow;
-    
-    void aesniDecryptRound128(ubyte* block) nothrow;
-    void aesniDecryptRound192(ubyte* block) nothrow;
-    void aesniDecryptRound256(ubyte* block) nothrow;
-    
-    void aesniLoadRoundKeys128(uint* roundKeys) nothrow;
-    void aesniLoadRoundKeys192(uint* roundKeys) nothrow;
-    void aesniLoadRoundKeys256(uint* roundKeys) nothrow;
+    extern (C) private {
+        void aesniScheduleKeys128(uint* roundKeys) nothrow;
+        void aesniScheduleKeys192(uint* roundKeys) nothrow;
+        void aesniScheduleKeys256(uint* roundKeys) nothrow;
+        
+        void aesniPrepareDecryptionKeys(uint* roundKeys, ulong nr) nothrow;
+        
+        void aesniEncryptRound128(ubyte* block) nothrow;
+        void aesniEncryptRound192(ubyte* block) nothrow;
+        void aesniEncryptRound256(ubyte* block) nothrow;
+        
+        void aesniDecryptRound128(ubyte* block) nothrow;
+        void aesniDecryptRound192(ubyte* block) nothrow;
+        void aesniDecryptRound256(ubyte* block) nothrow;
+        
+        void aesniLoadRoundKeys128(uint* roundKeys) nothrow;
+        void aesniLoadRoundKeys192(uint* roundKeys) nothrow;
+        void aesniLoadRoundKeys256(uint* roundKeys) nothrow;
+    }
+} 
+else
+{
+    extern (C) bool _aesniIsSupported() nothrow;
+    alias aesniIsSupported = _aesniIsSupported;
+
+    extern (C) private {
+        void _aesniScheduleKeys128(uint* roundKeys) nothrow;
+        alias aesniScheduleKeys128 = _aesniScheduleKeys128;
+        void _aesniScheduleKeys192(uint* roundKeys) nothrow;
+        alias aesniScheduleKeys192 = _aesniScheduleKeys192;
+        void _aesniScheduleKeys256(uint* roundKeys) nothrow;
+        alias aesniScheduleKeys256 = _aesniScheduleKeys256;
+        
+        void _aesniPrepareDecryptionKeys(uint* roundKeys, ulong nr) nothrow;
+        alias aesniPrepareDecryptionKeys = _aesniPrepareDecryptionKeys;
+        
+        void _aesniEncryptRound128(ubyte* block) nothrow;
+        alias aesniEncryptRound128 = _aesniEncryptRound128;
+        void _aesniEncryptRound192(ubyte* block) nothrow;
+        alias aesniEncryptRound192 = _aesniEncryptRound192;
+        void _aesniEncryptRound256(ubyte* block) nothrow;
+        alias aesniEncryptRound256 = _aesniEncryptRound256;
+        
+        void _aesniDecryptRound128(ubyte* block) nothrow;
+        alias aesniDecryptRound128 = _aesniDecryptRound128;
+        void _aesniDecryptRound192(ubyte* block) nothrow;
+        alias aesniDecryptRound192 = _aesniDecryptRound192;
+        void _aesniDecryptRound256(ubyte* block) nothrow;
+        alias aesniDecryptRound256 = _aesniDecryptRound256;
+        
+        void _aesniLoadRoundKeys128(uint* roundKeys) nothrow;
+        alias aesniLoadRoundKeys128 = _aesniLoadRoundKeys128;
+        void _aesniLoadRoundKeys192(uint* roundKeys) nothrow;
+        alias aesniLoadRoundKeys192 = _aesniLoadRoundKeys192;
+        void _aesniLoadRoundKeys256(uint* roundKeys) nothrow;
+        alias aesniLoadRoundKeys256 = _aesniLoadRoundKeys256;
+    }
 }
 
 class AesniEncryptor128 : AesEncryptor {

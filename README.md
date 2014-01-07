@@ -19,4 +19,4 @@ Use `make aestool` or `make speedtest` to build either of the utilities. All bin
 
 You will need [nasm](http://www.nasm.us/) for the assembly code and [DMD v2.064](http://dlang.org/download.html) or greater for the D code.
 
-At the moment, this will ~~probably~~ definitely only build on a 64-bit Mac. If you want to manually compile just the D code, it should be portable, but I haven't bothered testing the assembly on other platforms yet, nor have I written the makefile to not include the AES-NI version on incompatible platforms. Making sure it works on Linux is next on my todo list.
+It should compile on 64-bit OS X and Linux machines. Slight modifications to the Makefile should help it run on Windows, but I haven't tested this at all. The D code should compile fine on 32-bit machines, but the assembly is written for 64-bit.

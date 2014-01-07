@@ -1,5 +1,14 @@
 DFLAGS += -m64 -Isource
+NASMFLAGS += 
 VPATH = source:build
+
+NAME = $(shell uname)
+ifeq ($(NAME), Linux)
+	NASMFLAGS += -f elf64
+endif
+ifeq ($(NAME), Darwin)
+	NASMFLAGS += -f macho64
+endif
 
 aestool: DFLAGS += -release -O -inline
 aestool: aes.o aes_asm.o aestool.d
@@ -16,7 +25,7 @@ test: source/aes/*.d aes_asm.o
 aes_asm.o: aes/aesni.asm
 	# nasm won't create the directory automatically
 	test -d build || mkdir build
-	nasm -f macho64 -o build/aes_asm.o source/aes/aesni.asm
+	nasm $(NASMFLAGS) -o build/aes_asm.o source/aes/aesni.asm
 
 aes.o: source/aes/*.d
 	dmd $(DFLAGS) -c source/aes/*.d -ofbuild/aes.o
